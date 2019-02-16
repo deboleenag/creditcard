@@ -1,0 +1,151 @@
+---
+title: "Credit Card Fraud Activity"
+author: "Deboleena"
+date: "4/2/2018"
+output: html_document
+---
+The Goal of this Project was to perform logistic regression on the Credit Card Fraud dataset and come up with the best model for predicting the fraud activity using the most influential variables of the dataset. The sensitivity of the best model was achieved at 88% 
+```{r warning=F, message=F}
+#loading libraries
+library(caTools)
+```
+
+Load data
+
+```{r warning=F}
+card <- read.table("./creditcardfraud/creditcard.csv", sep = ",", header = TRUE)
+
+#structure of the data 
+str(card)
+
+#Tranforming class to a factor
+card$Class <- as.factor(card$Class)
+```
+
+
+## Sampling training data
+A training and test object was generated using 70% of partitioning
+```{r warning=F}
+set.seed(1)
+split <- sample.split(card$Class, SplitRatio = 0.7)
+train <- subset(card, split == T)
+cv <- subset(card, split == F)
+```
+
+##Logistic Model
+```{r warning=F}
+# Logistic regression
+glm.model <- glm(Class ~ ., data = train, family = "binomial")
+
+# Analyze logistic regression model with all variables
+summary(glm.model)
+```
+
+Create two other models with only statistically significant variables at 95% and 99%, respectively.
+
+```{r warning=F}
+# Model 2 containing variables at 95% significance
+glm.model2 <- glm(Class ~ Time + V1 + V4 + V8 + V9 + V10 + V13 + V14 + V20 + V21 + V22 + V27 + V28, data = train, family = "binomial")
+
+# Model 3 containing variables at 99% significance
+glm.model3 <- glm(Class ~ V4 + V8 + V9 + V10 + V13 + V14 + V20 + V21 + V22 + V27, data = train, family = "binomial")
+```
+
+Analyzing 3 models. 
+
+```{r warning=F}
+## Compare 3 models using ANOVA, at 99% level all three models are significantly different
+anova(glm.model, glm.model2, glm.model3, test = "Chisq")
+```
+
+## Resample to test 3 models
+
+```{r warning=F}
+# Create table for model accuracy and sensitivity for each sampling iteration
+headers<-c("Threshold","Model1","Model2","Model3")
+glm.accuracycomparisson <- as.data.frame(matrix(0,ncol=4,nrow=0))
+glm.sensitivitycomparisson <- as.data.frame(matrix(0,ncol=4,nrow=0))
+
+# Before start sampling set seed to 1
+set.seed(1)
+
+for(i in 1:10) {
+  
+# Split data 70:30
+split <- sample.split(card$Class, SplitRatio = 0.7)
+train <- subset(card, split == T)
+cv <- subset(card, split == F)
+
+# Logistic regression
+glm.model <- glm(Class ~ ., data = train, family = "binomial")
+glm.model2 <- glm(Class ~ Time + V1 + V4 + V8 + V9 + V10 + V13 + V14 + V20 + V21 + V22 + V27 + V28, data = train, family = "binomial")
+glm.model3 <- glm(Class ~ V4 + V8 + V9 + V10 + V13 + V14 + V20 + V21 + V22 + V27, data = train, family = "binomial")
+
+## Predict response
+glm.predict <- predict(glm.model, cv, type = "response")
+glm.predict2 <- predict(glm.model2, cv, type = "response")
+glm.predict3 <- predict(glm.model3, cv, type = "response")
+
+## Run sampling on different threshold
+for(j in c(0.4, 0.5, 0.6, 0.7, 0.8)) {
+  
+glm.table <- table(cv$Class, glm.predict > j)
+glm.accuracy <- (glm.table[1]+glm.table[4])/(glm.table[1]+glm.table[2]+glm.table[3]+glm.table[4])
+glm.sensitivity <- glm.table[4]/(glm.table[3]+glm.table[4])
+
+glm.table2 <- table(cv$Class, glm.predict2 > j)
+glm.accuracy2 <- (glm.table2[1]+glm.table2[4])/(glm.table2[1]+glm.table2[2]+glm.table2[3]+glm.table2[4])
+glm.sensitivity2 <- glm.table2[4]/(glm.table2[3]+glm.table2[4])
+
+glm.table3 <- table(cv$Class, glm.predict3 > j)
+glm.accuracy3 <- (glm.table3[1]+glm.table3[4])/(glm.table3[1]+glm.table3[2]+glm.table3[3]+glm.table3[4])
+glm.sensitivity3 <- glm.table3[4]/(glm.table3[3]+glm.table3[4])
+
+## Insert logistic regression to sampling results table
+glm.accuracycomparisson <-rbind(glm.accuracycomparisson, c(j, glm.accuracy, glm.accuracy2, glm.accuracy3))
+names(glm.accuracycomparisson)<-headers
+glm.sensitivitycomparisson <-rbind(glm.sensitivitycomparisson, c(j, glm.sensitivity, glm.sensitivity2, glm.sensitivity3))
+names(glm.sensitivitycomparisson)<-headers
+}
+}
+```
+
+
+## Create plots of results
+```{r warning=F}
+# Table of sampling results
+glm.accuracycomparisson$Threshold <- as.factor(glm.accuracycomparisson$Threshold)
+
+glm.sensitivitycomparisson$Threshold <- as.factor(glm.sensitivitycomparisson$Threshold)
+
+```
+
+
+
+```{r warning=F, echo=FALSE}
+# Box plot of accuracy
+par(mar=c(2,2,2,2))
+par(mfrow = c(2,5))
+boxplot(subset(glm.accuracycomparisson, Threshold == "0.4")[,2:4], main = "Accuracy at 40%", col = "blue3", ylim = c(0.99895, 0.9993))
+boxplot(subset(glm.accuracycomparisson, Threshold == "0.5")[,2:4], main = "Accuracy at 50%", col = "red2", ylim = c(0.99895, 0.9993))
+boxplot(subset(glm.accuracycomparisson, Threshold == "0.6")[,2:4], main = "Accuracy at 60%", col = "green", ylim = c(0.99895, 0.9993))
+boxplot(subset(glm.accuracycomparisson, Threshold == "0.7")[,2:4], main = "Accuracy at 70%", col = "cyan", ylim = c(0.99895, 0.9993))
+boxplot(subset(glm.accuracycomparisson, Threshold == "0.8")[,2:4], main = "Accuracy at 80%", col = "magenta", ylim = c(0.99895, 0.9993))
+
+# Box plot of sensitivity
+boxplot(subset(glm.sensitivitycomparisson, Threshold == "0.4")[,2:4], main = "Sensitivity at 40%", col = "blue3", ylim = c(0.75, 0.9))
+boxplot(subset(glm.sensitivitycomparisson, Threshold == "0.5")[,2:4], main = "Sensitivity at 50%", col = "red2", ylim = c(0.75, 0.9))
+boxplot(subset(glm.sensitivitycomparisson, Threshold == "0.6")[,2:4], main = "Sensitivity at 60%", col = "green", ylim = c(0.75, 0.9))
+boxplot(subset(glm.sensitivitycomparisson, Threshold == "0.7")[,2:4], main = "Sensitivity at 70%", col = "cyan", ylim = c(0.75, 0.9))
+boxplot(subset(glm.sensitivitycomparisson, Threshold == "0.8")[,2:4], main = "Sensitivity at 80%", col = "magenta", ylim = c(0.75, 0.9))
+```
+
+The fraud detection models are more concerned about the false negatives since investigations are conducted to further determine actual fraud. Most of the observations are true negatives and the accuray measure is observed inevitably large.
+
+Even though some models have a higher accuracy rate, their sensitivity rate is not as significant. The best model is Model 1 at 70% threshold with the following sensitivity:
+
+```{r warning=F}
+median(subset(glm.sensitivitycomparisson, Threshold == "0.7")[,2])
+```
+
+## Maximum achieved sensitivity: 88%
